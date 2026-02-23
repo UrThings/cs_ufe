@@ -1,0 +1,208 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        Int          @id @default(autoincrement())
+  email     String       @unique
+  name      String?
+  phone     String?      @unique
+  studentCode String?    @unique
+  avatar    String?
+  role      UserRole     @default(MEMBER)
+  hashedPassword String
+  teams     TeamMember[]
+  ownedTeams Team[]      @relation("TeamOwner")
+  tournamentJoinRequests TournamentJoinRequest[] @relation("JoinRequestByUser")
+  reviewedTournamentJoinRequests TournamentJoinRequest[] @relation("JoinRequestReviewedByUser")
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+}
+
+enum UserRole {
+  MEMBER
+  ADMIN
+}
+
+model Team {
+  id          Int          @id @default(autoincrement())
+  name        String
+  slug        String       @unique
+  teamCode    String       @unique
+  isPaid      Boolean      @default(false)
+  paidAt      DateTime?
+  description String?
+  ownerId     Int
+  owner       User         @relation("TeamOwner", fields: [ownerId], references: [id])
+  members     TeamMember[]
+  tournaments Tournament[]
+  championTournaments Tournament[] @relation("TournamentChampion")
+  tournamentEntries TournamentTeam[]
+  tournamentJoinRequests TournamentJoinRequest[]
+  homeMatches Match[]      @relation("HomeTeamMatches")
+  awayMatches Match[]      @relation("AwayTeamMatches")
+  winnerMatches Match[]    @relation("WinnerTeamMatches")
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([ownerId])
+}
+
+model TeamMember {
+  id        Int        @id @default(autoincrement())
+  userId    Int
+  teamId    Int
+  role      TeamRole   @default(MEMBER)
+  joinedAt  DateTime   @default(now())
+  user      User       @relation(fields: [userId], references: [id])
+  team      Team       @relation(fields: [teamId], references: [id])
+
+  @@unique([userId])
+  @@unique([userId, teamId])
+  @@index([teamId, role])
+}
+
+enum TeamRole {
+  MEMBER
+  CAPTAIN
+  ADMIN
+}
+
+model Tournament {
+  id          Int              @id @default(autoincrement())
+  title       String
+  slug        String           @unique
+  format      TournamentFormat
+  status      TournamentStatus @default(DRAFT)
+  startDate   DateTime
+  endDate     DateTime?
+  seededAt    DateTime?
+  finishedAt  DateTime?
+  championTeamId Int?
+  headliner   String?
+  teamId      Int
+  team        Team             @relation(fields: [teamId], references: [id])
+  championTeam Team?           @relation("TournamentChampion", fields: [championTeamId], references: [id])
+  participants TournamentTeam[]
+  joinRequests TournamentJoinRequest[]
+  settings    TournamentSettings?
+  matches     Match[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([teamId])
+  @@index([status])
+  @@index([championTeamId])
+  @@index([startDate])
+}
+
+model TournamentSettings {
+  id          Int        @id @default(autoincrement())
+  tournamentId Int       @unique
+  teamLimit   Int
+  matchBestOf Int
+  finalBestOf Int
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  tournament  Tournament @relation(fields: [tournamentId], references: [id])
+
+  @@index([tournamentId])
+}
+
+model TournamentTeam {
+  id           Int        @id @default(autoincrement())
+  tournamentId Int
+  teamId       Int
+  joinedAt     DateTime   @default(now())
+  tournament   Tournament @relation(fields: [tournamentId], references: [id])
+  team         Team       @relation(fields: [teamId], references: [id])
+
+  @@unique([tournamentId, teamId])
+  @@index([tournamentId])
+  @@index([teamId])
+}
+
+model TournamentJoinRequest {
+  id                Int                         @id @default(autoincrement())
+  tournamentId      Int
+  teamId            Int
+  requestedByUserId Int
+  reviewedByUserId  Int?
+  status            TournamentJoinRequestStatus @default(PENDING)
+  reviewNote        String?
+  requestedAt       DateTime                    @default(now())
+  reviewedAt        DateTime?
+  tournament        Tournament                  @relation(fields: [tournamentId], references: [id])
+  team              Team                        @relation(fields: [teamId], references: [id])
+  requestedByUser   User                        @relation("JoinRequestByUser", fields: [requestedByUserId], references: [id])
+  reviewedByUser    User?                       @relation("JoinRequestReviewedByUser", fields: [reviewedByUserId], references: [id])
+
+  @@unique([tournamentId, teamId])
+  @@index([status, tournamentId])
+  @@index([teamId])
+  @@index([requestedByUserId])
+}
+
+enum TournamentFormat {
+  SINGLE_ELIMINATION
+  DOUBLE_ELIMINATION
+  ROUND_ROBIN
+}
+
+enum TournamentStatus {
+  DRAFT
+  ACTIVE
+  FINISHED
+}
+
+enum TournamentJoinRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Match {
+  id           Int         @id @default(autoincrement())
+  tournamentId Int
+  round        Int
+  position     Int
+  homeTeamId   Int
+  awayTeamId   Int?
+  winnerTeamId Int?
+  scheduledAt  DateTime
+  status       MatchStatus @default(SCHEDULED)
+  homeScore    Int?
+  awayScore    Int?
+  tournament   Tournament  @relation(fields: [tournamentId], references: [id])
+  homeTeam     Team        @relation("HomeTeamMatches", fields: [homeTeamId], references: [id])
+  awayTeam     Team?       @relation("AwayTeamMatches", fields: [awayTeamId], references: [id])
+  winnerTeam   Team?       @relation("WinnerTeamMatches", fields: [winnerTeamId], references: [id])
+  completedAt  DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@unique([tournamentId, round, position])
+  @@index([tournamentId, round])
+  @@index([tournamentId, scheduledAt])
+  @@index([homeTeamId, scheduledAt])
+  @@index([awayTeamId, scheduledAt])
+  @@index([winnerTeamId])
+}
+
+enum MatchStatus {
+  SCHEDULED
+  LIVE
+  COMPLETED
+  CANCELED
+}
