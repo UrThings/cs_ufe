@@ -11,24 +11,23 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model User {
-  id        Int          @id @default(autoincrement())
-  email     String       @unique
-  name      String?
-  phone     String?      @unique
-  studentCode String?    @unique
-  avatar    String?
-  role      UserRole     @default(MEMBER)
-  hashedPassword String
-  teams     TeamMember[]
-  ownedTeams Team[]      @relation("TeamOwner")
-  tournamentJoinRequests TournamentJoinRequest[] @relation("JoinRequestByUser")
+  id                             Int                     @id @default(autoincrement())
+  email                          String                  @unique
+  name                           String?
+  phone                          String?                 @unique
+  studentCode                    String?                 @unique
+  avatar                         String?
+  role                           UserRole                @default(MEMBER)
+  hashedPassword                 String
+  teams                          TeamMember[]
+  ownedTeams                     Team[]                  @relation("TeamOwner")
+  tournamentJoinRequests         TournamentJoinRequest[] @relation("JoinRequestByUser")
   reviewedTournamentJoinRequests TournamentJoinRequest[] @relation("JoinRequestReviewedByUser")
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
+  createdAt                      DateTime                @default(now())
+  updatedAt                      DateTime                @updatedAt
 }
 
 enum UserRole {
@@ -37,37 +36,37 @@ enum UserRole {
 }
 
 model Team {
-  id          Int          @id @default(autoincrement())
-  name        String
-  slug        String       @unique
-  teamCode    String       @unique
-  isPaid      Boolean      @default(false)
-  paidAt      DateTime?
-  description String?
-  ownerId     Int
-  owner       User         @relation("TeamOwner", fields: [ownerId], references: [id])
-  members     TeamMember[]
-  tournaments Tournament[]
-  championTournaments Tournament[] @relation("TournamentChampion")
-  tournamentEntries TournamentTeam[]
+  id                     Int                     @id @default(autoincrement())
+  name                   String
+  slug                   String                  @unique
+  teamCode               String                  @unique
+  isPaid                 Boolean                 @default(false)
+  paidAt                 DateTime?
+  description            String?
+  ownerId                Int
+  owner                  User                    @relation("TeamOwner", fields: [ownerId], references: [id])
+  members                TeamMember[]
+  tournaments            Tournament[]
+  championTournaments    Tournament[]            @relation("TournamentChampion")
+  tournamentEntries      TournamentTeam[]
   tournamentJoinRequests TournamentJoinRequest[]
-  homeMatches Match[]      @relation("HomeTeamMatches")
-  awayMatches Match[]      @relation("AwayTeamMatches")
-  winnerMatches Match[]    @relation("WinnerTeamMatches")
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  homeMatches            Match[]                 @relation("HomeTeamMatches")
+  awayMatches            Match[]                 @relation("AwayTeamMatches")
+  winnerMatches          Match[]                 @relation("WinnerTeamMatches")
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
 
   @@index([ownerId])
 }
 
 model TeamMember {
-  id        Int        @id @default(autoincrement())
-  userId    Int
-  teamId    Int
-  role      TeamRole   @default(MEMBER)
-  joinedAt  DateTime   @default(now())
-  user      User       @relation(fields: [userId], references: [id])
-  team      Team       @relation(fields: [teamId], references: [id])
+  id       Int      @id @default(autoincrement())
+  userId   Int
+  teamId   Int
+  role     TeamRole @default(MEMBER)
+  joinedAt DateTime @default(now())
+  user     User     @relation(fields: [userId], references: [id])
+  team     Team     @relation(fields: [teamId], references: [id])
 
   @@unique([userId])
   @@unique([userId, teamId])
@@ -81,26 +80,26 @@ enum TeamRole {
 }
 
 model Tournament {
-  id          Int              @id @default(autoincrement())
-  title       String
-  slug        String           @unique
-  format      TournamentFormat
-  status      TournamentStatus @default(DRAFT)
-  startDate   DateTime
-  endDate     DateTime?
-  seededAt    DateTime?
-  finishedAt  DateTime?
+  id             Int                     @id @default(autoincrement())
+  title          String
+  slug           String                  @unique
+  format         TournamentFormat
+  status         TournamentStatus        @default(DRAFT)
+  startDate      DateTime
+  endDate        DateTime?
+  seededAt       DateTime?
+  finishedAt     DateTime?
   championTeamId Int?
-  headliner   String?
-  teamId      Int
-  team        Team             @relation(fields: [teamId], references: [id])
-  championTeam Team?           @relation("TournamentChampion", fields: [championTeamId], references: [id])
-  participants TournamentTeam[]
-  joinRequests TournamentJoinRequest[]
-  settings    TournamentSettings?
-  matches     Match[]
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  headliner      String?
+  teamId         Int
+  team           Team                    @relation(fields: [teamId], references: [id])
+  championTeam   Team?                   @relation("TournamentChampion", fields: [championTeamId], references: [id])
+  participants   TournamentTeam[]
+  joinRequests   TournamentJoinRequest[]
+  settings       TournamentSettings?
+  matches        Match[]
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
 
   @@index([teamId])
   @@index([status])
@@ -109,14 +108,14 @@ model Tournament {
 }
 
 model TournamentSettings {
-  id          Int        @id @default(autoincrement())
-  tournamentId Int       @unique
-  teamLimit   Int
-  matchBestOf Int
-  finalBestOf Int
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  tournament  Tournament @relation(fields: [tournamentId], references: [id])
+  id           Int        @id @default(autoincrement())
+  tournamentId Int        @unique
+  teamLimit    Int
+  matchBestOf  Int
+  finalBestOf  Int
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  tournament   Tournament @relation(fields: [tournamentId], references: [id])
 
   @@index([tournamentId])
 }
