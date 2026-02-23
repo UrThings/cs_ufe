@@ -4,9 +4,24 @@ import { env } from "@/config/environment";
 
 declare global {
   var prisma: PrismaClient | undefined;
+  var prismaAdapter: PrismaPg | undefined;
 }
 
-const adapter = new PrismaPg({ connectionString: env.DATABASE_URL });
+const poolMax = Number(process.env.PG_POOL_MAX ?? (env.NODE_ENV === "production" ? "5" : "1"));
+const poolConfig = {
+  connectionString: env.DATABASE_URL,
+  max: Number.isFinite(poolMax) && poolMax > 0 ? poolMax : 1,
+  idleTimeoutMillis: 20_000,
+  connectionTimeoutMillis: 10_000,
+};
+
+const adapter =
+  globalThis.prismaAdapter ??
+  new PrismaPg(poolConfig, {
+    onPoolError: (error) => {
+      console.error("Prisma PG pool error:", error);
+    },
+  });
 const logOptions: Prisma.PrismaClientOptions["log"] =
   process.env.NODE_ENV === "production"
     ? ["error"]
@@ -20,6 +35,7 @@ const prismaClient =
   });
 
 if (process.env.NODE_ENV !== "production") {
+  globalThis.prismaAdapter = adapter;
   globalThis.prisma = prismaClient;
 }
 
