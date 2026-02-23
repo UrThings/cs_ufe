@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import type { TeamRole } from "@/generated/prisma/enums";
+import type { TeamRole } from "../../../generated/prisma/enums";
 
 const TEAM_CODE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 const TEAM_CODE_LENGTH = 6;
