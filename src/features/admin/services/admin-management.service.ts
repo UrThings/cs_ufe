@@ -1,4 +1,4 @@
-import { Prisma } from "../../../generated/prisma";
+import { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 
 const SERIALIZABLE_RETRIES = 2;
