@@ -4,7 +4,11 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Label } from "@/components/ui";
 
-export function AdminTournamentManager() {
+type AdminTournamentManagerProps = {
+  initialTournamentEnabled: boolean;
+};
+
+export function AdminTournamentManager({ initialTournamentEnabled }: AdminTournamentManagerProps) {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -12,7 +16,10 @@ export function AdminTournamentManager() {
   const [matchBestOf, setMatchBestOf] = useState<1 | 3>(1);
   const [finalBestOf, setFinalBestOf] = useState<1 | 3 | 5>(3);
   const [message, setMessage] = useState<string | null>(null);
+  const [controlMessage, setControlMessage] = useState<string | null>(null);
+  const [tournamentEnabled, setTournamentEnabled] = useState(initialTournamentEnabled);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSavingControl, setIsSavingControl] = useState(false);
 
   const createTournament = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -52,6 +59,32 @@ export function AdminTournamentManager() {
     }
   };
 
+  const saveTournamentControl = async () => {
+    setControlMessage(null);
+    setIsSavingControl(true);
+
+    try {
+      const response = await fetch("/api/admin/tournament-control", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: tournamentEnabled }),
+      });
+      const result = await response.json();
+
+      if (!response.ok) {
+        setControlMessage(result.message ?? "Unable to update tournament access control.");
+        return;
+      }
+
+      setControlMessage(result.message ?? "Tournament access control updated.");
+      router.refresh();
+    } catch {
+      setControlMessage("Unable to reach the server.");
+    } finally {
+      setIsSavingControl(false);
+    }
+  };
+
   return (
     <Card className="mt-8 border border-amber-500/40 bg-[#15171b]/70">
       <CardHeader>
@@ -60,7 +93,31 @@ export function AdminTournamentManager() {
           <Badge className="bg-amber-500/20 text-zinc-200">No host required</Badge>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-5">
+        <section className="space-y-3 rounded-xl border border-amber-500/30 bg-black/25 p-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-zinc-100">Tournament page access</p>
+              <p className="text-xs text-zinc-200/75">
+                Enabled: users see the header Tournament button and can open `/tournament`.
+              </p>
+            </div>
+            <label className="flex items-center gap-2 text-sm text-zinc-200/85">
+              <input
+                type="checkbox"
+                checked={tournamentEnabled}
+                onChange={(event) => setTournamentEnabled(event.target.checked)}
+                className="h-4 w-4 rounded border-amber-300/30 bg-zinc-900/50"
+              />
+              Enabled
+            </label>
+          </div>
+          <Button type="button" onClick={saveTournamentControl} disabled={isSavingControl}>
+            {isSavingControl ? "Saving..." : "Save access setting"}
+          </Button>
+          {controlMessage ? <p className="text-sm text-zinc-200/80">{controlMessage}</p> : null}
+        </section>
+
         <form className="grid gap-3 sm:grid-cols-2" onSubmit={createTournament}>
           <div className="space-y-2 sm:col-span-2">
             <Label htmlFor="title">Tournament title</Label>

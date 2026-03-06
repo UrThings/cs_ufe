@@ -1,12 +1,21 @@
 import Link from "next/link";
 import { ShieldCheck } from "lucide-react";
 import { siteConfig } from "@/constants/site";
+import { getTournamentEnabledFlag } from "@/features/tournament";
 import { getCurrentUser } from "@/lib/auth/get-current-user";
 import { HeaderNavLinks } from "./HeaderNavLinks";
 import {LogoutButton} from "./logoutButton"
 
 export async function SiteHeader() {
-  const user = await getCurrentUser();
+  const [user, tournamentEnabled] = await Promise.all([
+    getCurrentUser(),
+    getTournamentEnabledFlag(),
+  ]);
+
+  const publicNavItems = tournamentEnabled
+    ? siteConfig.navMenu
+    : siteConfig.navMenu.filter((item) => item.href !== "/tournament");
+
   const navItems =
     user?.role === "ADMIN"
       ? [
@@ -14,7 +23,7 @@ export async function SiteHeader() {
           { title: "Admin Tournament", href: "/admin/tournament" },
         ]
       : [
-          ...siteConfig.navMenu,
+          ...publicNavItems,
           ...(user ? [{ title: "Team", href: "/team" }] : []),
         ];
 

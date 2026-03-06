@@ -1,13 +1,11 @@
 import Image from "next/image";
 import Link from "next/link";
-import { Activity, Crosshair, ShieldCheck, Swords, Users } from "lucide-react";
+import { Activity, Crosshair, ShieldCheck, Users } from "lucide-react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { AnimatedPage } from "@/components/motion/AnimatedPage";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { buttonVariants } from "@/components/ui/Button";
 import { getCurrentUser } from "@/lib/auth/get-current-user";
-import { getPlatformMetrics } from "@/lib/metrics";
-import { prisma } from "@/lib/prisma";
 import { cn } from "@/lib/utils";
 
 const highlights = [
@@ -29,26 +27,7 @@ const highlights = [
 ];
 
 export default async function HomePage() {
-  const [metrics, user, latestTournaments] = await Promise.all([
-    getPlatformMetrics(),
-    getCurrentUser(),
-    prisma.tournament.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 6,
-      select: {
-        id: true,
-        title: true,
-        status: true,
-        startDate: true,
-        _count: {
-          select: {
-            participants: true,
-            matches: true,
-          },
-        },
-      },
-    }),
-  ]);
+  const user = await getCurrentUser();
 
   return (
     <MainLayout>
@@ -103,7 +82,7 @@ export default async function HomePage() {
             </div>
           </div>
         </section>
-
+        {/* 
         <section className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Card className="border-amber-300/35 bg-[#1a1b20]/70">
             <CardContent className="space-y-1">
@@ -129,7 +108,7 @@ export default async function HomePage() {
               <p className="text-xs uppercase tracking-[0.22em] text-zinc-300">Paid Teams</p>
             </CardContent>
           </Card>
-        </section>
+        </section> */}
 
         <section className="mt-8 grid gap-4 md:grid-cols-3">
           {highlights.map((item) => (
@@ -146,7 +125,7 @@ export default async function HomePage() {
           ))}
         </section>
 
-        <section className="mt-8 grid gap-4 lg:grid-cols-[1fr_1fr]">
+        <section className="mt-8 grid gap-4 lg:grid-cols-[1fr]">
           <Card className="border-amber-300/30 bg-[#15171b]/74">
             <CardHeader className="flex items-center gap-2 sm:flex-row">
               <Users className="h-5 w-5 text-amber-200" />
@@ -168,38 +147,19 @@ export default async function HomePage() {
             </CardContent>
           </Card>
 
-          <Card className="border-amber-300/30 bg-[#15171b]/74">
-            <CardHeader className="flex items-center justify-between gap-2 sm:flex-row">
-              <div className="flex items-center gap-2">
-                <Swords className="h-5 w-5 text-amber-200" />
-                <CardTitle>Latest tournaments</CardTitle>
+          {/* <Card className="hidden overflow-hidden border-amber-300/30 bg-[#15171b]/74 lg:block">
+            <CardContent className="p-0">
+              <div className="flex h-full min-h-[360px] items-center justify-center p-4">
+                <Image
+                  src="/poster.png"
+                  alt="Tournament poster"
+                  width={550}
+                  height={}
+                  className="h-auto w-auto max-w-full object-contain opacity-90"
+                />
               </div>
-              <Link href="/tournament" className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}>
-                View all
-              </Link>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {latestTournaments.length === 0 ? (
-                <p className="text-sm text-zinc-300/80">No tournaments yet.</p>
-              ) : (
-                latestTournaments.map((tournament) => (
-                  <Link
-                    key={tournament.id}
-                    href={`/tournament/${tournament.id}`}
-                    className="block rounded-md border border-amber-300/20 bg-zinc-950/48 p-3 transition hover:-translate-y-0.5 hover:border-amber-200/45"
-                  >
-                    <p className="text-sm font-semibold text-zinc-100">{tournament.title}</p>
-                    <p className="mt-1 text-xs text-zinc-300/85">
-                      {tournament.status} | Teams {tournament._count.participants} | Matches {tournament._count.matches}
-                    </p>
-                    <p className="mt-1 text-xs text-zinc-400">
-                      Start {new Date(tournament.startDate).toLocaleString()}
-                    </p>
-                  </Link>
-                ))
-              )}
             </CardContent>
-          </Card>
+          </Card> */}
         </section>
       </AnimatedPage>
     </MainLayout>

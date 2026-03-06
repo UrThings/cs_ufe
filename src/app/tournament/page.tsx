@@ -2,9 +2,21 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import { PageHeading } from "@/components/layout/PageHeading";
 import { AnimatedPage } from "@/components/motion/AnimatedPage";
 import { TournamentLobby } from "@/components/tournament/TournamentLobby";
+import { getTournamentEnabledFlag } from "@/features/tournament";
+import { getCurrentUser } from "@/lib/auth/get-current-user";
 import { prisma } from "@/lib/prisma";
+import { redirect } from "next/navigation";
 
 export default async function TournamentPage() {
+  const [user, tournamentEnabled] = await Promise.all([
+    getCurrentUser(),
+    getTournamentEnabledFlag(),
+  ]);
+
+  if (!tournamentEnabled && user?.role !== "ADMIN") {
+    redirect("/");
+  }
+
   const [tournaments, settingsRows] = await Promise.all([
     prisma.tournament.findMany({
       orderBy: [{ createdAt: "desc" }],

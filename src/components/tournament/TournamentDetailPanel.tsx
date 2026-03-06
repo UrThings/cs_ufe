@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { TournamentBracket, type BracketRound } from "@/components/tournament/TournamentBracket";
+import { TournamentBracket } from "@/components/tournament/TournamentBracket";
+import { buildBracketRounds } from "@/components/tournament/bracket-rounds";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 
 type TeamSummary = {
@@ -74,60 +75,6 @@ function getMatchStatusTone(status: MatchSummary["status"]) {
   return "border-amber-300/35 bg-amber-500/10 text-zinc-200";
 }
 
-function buildRoundName(round: number, maxRound: number) {
-  if (round === maxRound) {
-    return "Final";
-  }
-  if (round === maxRound - 1) {
-    return "Semifinal";
-  }
-  if (round === maxRound - 2) {
-    return "Quarterfinal";
-  }
-  return `Round ${round}`;
-}
-
-function toRounds(matches: MatchSummary[]): BracketRound[] {
-  if (matches.length === 0) {
-    return [];
-  }
-
-  const map = new Map<number, BracketRound>();
-  const maxRound = Math.max(...matches.map((m) => m.round), 1);
-
-  matches.forEach((match) => {
-    if (!map.has(match.round)) {
-      map.set(match.round, {
-        id: `round-${match.round}`,
-        name: buildRoundName(match.round, maxRound),
-        matches: [],
-      });
-    }
-
-    map.get(match.round)!.matches.push({
-      id: `match-${match.id}`,
-      status: match.status === "COMPLETED" ? "COMPLETED" : match.status === "LIVE" ? "LIVE" : "SCHEDULED",
-      winnerTeamId: match.winnerTeamId ?? undefined,
-      homeTeam: {
-        id: match.homeTeam.id,
-        name: match.homeTeam.name,
-        score: match.homeScore,
-      },
-      awayTeam: match.awayTeam
-        ? {
-            id: match.awayTeam.id,
-            name: match.awayTeam.name,
-            score: match.awayScore,
-          }
-        : null,
-    });
-  });
-
-  return Array.from(map.entries())
-    .sort((a, b) => a[0] - b[0])
-    .map(([, value]) => value);
-}
-
 export function TournamentDetailPanel({ tournament, viewer }: TournamentDetailPanelProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"overview" | "teams" | "history" | "bracket">("overview");
@@ -135,7 +82,10 @@ export function TournamentDetailPanel({ tournament, viewer }: TournamentDetailPa
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [historyPage, setHistoryPage] = useState(1);
   const [historyPageSize, setHistoryPageSize] = useState(HISTORY_INITIAL_PAGE_SIZE);
-  const rounds = useMemo(() => toRounds(tournament.matches), [tournament.matches]);
+  const rounds = useMemo(
+    () => buildBracketRounds(tournament.matches, tournament.teamLimit),
+    [tournament.matches, tournament.teamLimit],
+  );
   const historyMatches = useMemo(
     () =>
       tournament.matches

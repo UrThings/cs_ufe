@@ -1,4 +1,5 @@
 import {
+  getTournamentEnabledFlag,
   isTournamentServiceError,
   joinTournament,
   joinTournamentSchema,
@@ -17,6 +18,11 @@ export async function POST(request: Request, context: RouteContext) {
   const auth = await requireUser();
   if (auth.response) {
     return auth.response;
+  }
+
+  const tournamentEnabled = await getTournamentEnabledFlag();
+  if (!tournamentEnabled && auth.user.role !== "ADMIN") {
+    return errorResponse("Tournament access is currently disabled by admin.", 403);
   }
 
   const params = await context.params;

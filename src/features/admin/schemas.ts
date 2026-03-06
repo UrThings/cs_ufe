@@ -57,3 +57,7 @@ export const adminUpdateTeamSchema = z
       data.isPaid !== undefined,
     { message: "Provide at least one field to update." },
   );
+
+export const adminTournamentControlSchema = z.object({
+  enabled: z.boolean(),
+});

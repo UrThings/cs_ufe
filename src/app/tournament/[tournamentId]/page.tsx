@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { TournamentDetailPanel } from "@/components/tournament/TournamentDetailPanel";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { PageHeading } from "@/components/layout/PageHeading";
 import { AnimatedPage } from "@/components/motion/AnimatedPage";
 import { buttonVariants } from "@/components/ui/Button";
+import { getTournamentEnabledFlag } from "@/features/tournament";
 import { getCurrentUser } from "@/lib/auth/get-current-user";
 import { prisma } from "@/lib/prisma";
 import { cn } from "@/lib/utils";
@@ -23,7 +24,14 @@ export default async function TournamentDetailPage({ params }: RouteContext) {
     notFound();
   }
 
-  const user = await getCurrentUser();
+  const [user, tournamentEnabled] = await Promise.all([
+    getCurrentUser(),
+    getTournamentEnabledFlag(),
+  ]);
+
+  if (!tournamentEnabled && user?.role !== "ADMIN") {
+    redirect("/");
+  }
 
   const [tournament, settingsRows, membership] = await Promise.all([
     prisma.tournament.findUnique({

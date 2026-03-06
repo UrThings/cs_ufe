@@ -9,6 +9,7 @@ import { buttonVariants } from "@/components/ui/Button";
 import { getCurrentUser } from "@/lib/auth/get-current-user";
 import { prisma } from "@/lib/prisma";
 import { cn } from "@/lib/utils";
+import { getTournamentEnabledFlag } from "@/features/tournament";
 
 const PAGE_SIZE = 10;
 
@@ -41,9 +42,12 @@ export default async function AdminTournamentPage({ searchParams }: AdminTournam
     redirect("/admin/login");
   }
 
-  const params = await searchParams;
+  const [params, totalTournaments, tournamentEnabled] = await Promise.all([
+    searchParams,
+    prisma.tournament.count(),
+    getTournamentEnabledFlag(),
+  ]);
   const requestedPage = resolvePage(params.page);
-  const totalTournaments = await prisma.tournament.count();
   const totalPages = Math.max(1, Math.ceil(totalTournaments / PAGE_SIZE));
   const currentPage = Math.min(requestedPage, totalPages);
   const skip = (currentPage - 1) * PAGE_SIZE;
@@ -89,7 +93,7 @@ export default async function AdminTournamentPage({ searchParams }: AdminTournam
           badge="ADMIN"
         />
 
-        <AdminTournamentManager />
+        <AdminTournamentManager initialTournamentEnabled={tournamentEnabled} />
 
         <section className="mt-8 space-y-4">
           <div className="flex items-center justify-between">
