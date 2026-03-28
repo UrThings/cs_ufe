@@ -1,6 +1,11 @@
 import { prisma } from "@/lib/prisma";
 
 const SERIALIZABLE_RETRIES = 2;
+const INTERACTIVE_TRANSACTION_OPTIONS = {
+  isolationLevel: "Serializable" as const,
+  maxWait: 10_000,
+  timeout: 20_000,
+};
 const RANDOM_SUFFIX_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 type TournamentTransaction = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
@@ -340,6 +345,13 @@ type ExpectedRoundMatch = {
   awayTeamId: number | null;
 };
 
+type AdvanceRoundMatch = {
+  position: number;
+  homeTeamId: number;
+  awayTeamId: number | null;
+  winnerTeamId: number | null;
+};
+
 function buildExpectedRoundMatches(teamIds: number[]) {
   const expected: ExpectedRoundMatch[] = [];
   let position = 1;
@@ -365,7 +377,23 @@ async function ensureNextRoundMatchesForWinners(
     scheduledAt: Date;
   },
 ) {
-  const expectedMatches = buildExpectedRoundMatches(options.winnerIds);
+  return ensureRoundMatches(tx, {
+    tournamentId: options.tournamentId,
+    round: options.round,
+    expectedMatches: buildExpectedRoundMatches(options.winnerIds),
+    scheduledAt: options.scheduledAt,
+  });
+}
+
+async function ensureRoundMatches(
+  tx: TournamentTransaction,
+  options: {
+    tournamentId: number;
+    round: number;
+    expectedMatches: ExpectedRoundMatch[];
+    scheduledAt: Date;
+  },
+) {
   const existingMatches = await tx.match.findMany({
     where: {
       tournamentId: options.tournamentId,
@@ -384,7 +412,7 @@ async function ensureNextRoundMatchesForWinners(
     },
   });
 
-  if (existingMatches.length > expectedMatches.length) {
+  if (existingMatches.length > options.expectedMatches.length) {
     throw new TournamentServiceError(
       409,
       `Round ${options.round} has more matches than expected.`,
@@ -392,7 +420,7 @@ async function ensureNextRoundMatchesForWinners(
   }
 
   for (const existing of existingMatches) {
-    const expected = expectedMatches[existing.position - 1];
+    const expected = options.expectedMatches[existing.position - 1];
     if (!expected) {
       throw new TournamentServiceError(
         409,
@@ -414,7 +442,7 @@ async function ensureNextRoundMatchesForWinners(
 
   const existingPositions = new Set(existingMatches.map((match) => match.position));
 
-  for (const expected of expectedMatches) {
+  for (const expected of options.expectedMatches) {
     if (existingPositions.has(expected.position)) {
       continue;
     }
@@ -452,6 +480,149 @@ async function ensureNextRoundMatchesForWinners(
   });
 }
 
+function buildChampionshipRoundMatches(
+  finalistIds: [number, number],
+  thirdPlaceTeamIds: [number, number],
+): ExpectedRoundMatch[] {
+  return [
+    {
+      position: 1,
+      homeTeamId: finalistIds[0],
+      awayTeamId: finalistIds[1],
+    },
+    {
+      position: 2,
+      homeTeamId: thirdPlaceTeamIds[0],
+      awayTeamId: thirdPlaceTeamIds[1],
+    },
+  ];
+}
+
+async function ensureChampionshipRoundMatches(
+  tx: TournamentTransaction,
+  options: {
+    tournamentId: number;
+    round: number;
+    finalistIds: [number, number];
+    thirdPlaceTeamIds: [number, number];
+    scheduledAt: Date;
+  },
+) {
+  return ensureRoundMatches(tx, {
+    tournamentId: options.tournamentId,
+    round: options.round,
+    expectedMatches: buildChampionshipRoundMatches(
+      options.finalistIds,
+      options.thirdPlaceTeamIds,
+    ),
+    scheduledAt: options.scheduledAt,
+  });
+}
+
+function getLoserTeamId(match: AdvanceRoundMatch) {
+  if (match.winnerTeamId === null || match.awayTeamId === null) {
+    throw new TournamentServiceError(
+      409,
+      "Unable to derive the losing team for the placement match.",
+    );
+  }
+
+  return match.winnerTeamId === match.homeTeamId
+    ? match.awayTeamId
+    : match.homeTeamId;
+}
+
+async function isChampionshipRound(
+  tx: TournamentTransaction,
+  tournamentId: number,
+  round: number,
+  matches: AdvanceRoundMatch[],
+) {
+  if (round <= 1 || matches.length !== 2) {
+    return false;
+  }
+
+  const positions = new Set(matches.map((match) => match.position));
+  if (!positions.has(1) || !positions.has(2)) {
+    return false;
+  }
+
+  const previousRoundMatchCount = await tx.match.count({
+    where: {
+      tournamentId,
+      round: round - 1,
+    },
+  });
+
+  return previousRoundMatchCount === 2;
+}
+
+async function loadAdvanceRoundMatches(
+  tx: TournamentTransaction,
+  tournamentId: number,
+  round: number,
+) {
+  return tx.match.findMany({
+    where: {
+      tournamentId,
+      round,
+    },
+    select: {
+      position: true,
+      homeTeamId: true,
+      awayTeamId: true,
+      winnerTeamId: true,
+    },
+    orderBy: {
+      position: "asc",
+    },
+  });
+}
+
+async function repairLegacyChampionshipRoundIfNeeded(
+  tx: TournamentTransaction,
+  tournamentId: number,
+  round: number,
+  matches: AdvanceRoundMatch[],
+) {
+  if (round <= 1 || matches.length !== 1 || matches[0]?.position !== 1) {
+    return matches;
+  }
+
+  const previousRoundMatches = await loadAdvanceRoundMatches(
+    tx,
+    tournamentId,
+    round - 1,
+  );
+
+  if (
+    previousRoundMatches.length !== 2 ||
+    previousRoundMatches.some(
+      (match) => match.winnerTeamId === null || match.awayTeamId === null,
+    )
+  ) {
+    return matches;
+  }
+
+  const finalistIds = previousRoundMatches.map(
+    (match) => match.winnerTeamId as number,
+  );
+  assertUniqueTeamIds(finalistIds);
+
+  await ensureChampionshipRoundMatches(tx, {
+    tournamentId,
+    round,
+    finalistIds: [finalistIds[0], finalistIds[1]],
+    thirdPlaceTeamIds: [
+      getLoserTeamId(previousRoundMatches[0]),
+      getLoserTeamId(previousRoundMatches[1]),
+    ],
+    scheduledAt: new Date(),
+  });
+
+  return loadAdvanceRoundMatches(tx, tournamentId, round);
+}
+
 async function advanceTournamentIfRoundComplete(
   tx: TournamentTransaction,
   tournamentId: number,
@@ -460,23 +631,22 @@ async function advanceTournamentIfRoundComplete(
   let currentRound = fromRound;
 
   while (true) {
-    const currentRoundMatches = await tx.match.findMany({
-      where: {
-        tournamentId,
-        round: currentRound,
-      },
-      select: {
-        position: true,
-        winnerTeamId: true,
-      },
-      orderBy: {
-        position: "asc",
-      },
-    });
+    let currentRoundMatches = await loadAdvanceRoundMatches(
+      tx,
+      tournamentId,
+      currentRound,
+    );
 
     if (currentRoundMatches.length === 0) {
       return { finished: false as const };
     }
+
+    currentRoundMatches = await repairLegacyChampionshipRoundIfNeeded(
+      tx,
+      tournamentId,
+      currentRound,
+      currentRoundMatches,
+    );
 
     if (
       currentRoundMatches.some(
@@ -486,8 +656,42 @@ async function advanceTournamentIfRoundComplete(
       return { finished: false as const };
     }
 
+    if (
+      await isChampionshipRound(tx, tournamentId, currentRound, currentRoundMatches)
+    ) {
+      const finalMatch = currentRoundMatches.find((match) => match.position === 1);
+
+      if (!finalMatch?.winnerTeamId) {
+        throw new TournamentServiceError(
+          409,
+          "Championship round is missing the final match result.",
+        );
+      }
+
+      const tournament = await tx.tournament.update({
+        where: { id: tournamentId },
+        data: {
+          status: "FINISHED",
+          championTeamId: finalMatch.winnerTeamId,
+          finishedAt: new Date(),
+          endDate: new Date(),
+        },
+        select: {
+          id: true,
+          status: true,
+          championTeamId: true,
+          finishedAt: true,
+        },
+      });
+
+      return {
+        finished: true as const,
+        tournament,
+      };
+    }
+
     const winnerIds = currentRoundMatches.map(
-      (match: { winnerTeamId: number | null }) => match.winnerTeamId as number,
+      (match: AdvanceRoundMatch) => match.winnerTeamId as number,
     );
     assertUniqueTeamIds(winnerIds);
 
@@ -516,12 +720,25 @@ async function advanceTournamentIfRoundComplete(
       };
     }
 
-    const nextRoundMatches = await ensureNextRoundMatchesForWinners(tx, {
-      tournamentId,
-      round: nextRound,
-      winnerIds,
-      scheduledAt: new Date(),
-    });
+    const nextRoundMatches =
+      currentRoundMatches.length === 2 &&
+      currentRoundMatches.every((match) => match.awayTeamId !== null)
+        ? await ensureChampionshipRoundMatches(tx, {
+            tournamentId,
+            round: nextRound,
+            finalistIds: [winnerIds[0], winnerIds[1]],
+            thirdPlaceTeamIds: [
+              getLoserTeamId(currentRoundMatches[0]),
+              getLoserTeamId(currentRoundMatches[1]),
+            ],
+            scheduledAt: new Date(),
+          })
+        : await ensureNextRoundMatchesForWinners(tx, {
+            tournamentId,
+            round: nextRound,
+            winnerIds,
+            scheduledAt: new Date(),
+          });
 
     const allAutoCompleted = nextRoundMatches.every(
       (match) => match.winnerTeamId !== null,
@@ -598,7 +815,7 @@ export async function createTournamentByAdmin(input: {
             },
           };
         },
-        { isolationLevel: "Serializable" },
+        INTERACTIVE_TRANSACTION_OPTIONS,
       ),
     );
   } catch (error) {
@@ -729,7 +946,7 @@ export async function updateTournamentByAdmin(input: {
             },
           };
         },
-        { isolationLevel: "Serializable" },
+        INTERACTIVE_TRANSACTION_OPTIONS,
       ),
     );
   } catch (error) {
@@ -862,7 +1079,7 @@ export async function seedPaidTeamsForTournament(input: {
             settings,
           };
         },
-        { isolationLevel: "Serializable" },
+        INTERACTIVE_TRANSACTION_OPTIONS,
       ),
     );
   } catch (error) {
@@ -952,7 +1169,20 @@ export async function pickMatchWinnerAndAdvance(input: {
               round: match.round,
             },
           });
-          const bestOf = matchesInRound === 1 ? settings.finalBestOf : settings.matchBestOf;
+          const previousRoundMatchCount =
+            match.round > 1
+              ? await tx.match.count({
+                  where: {
+                    tournamentId: input.tournamentId,
+                    round: match.round - 1,
+                  },
+                })
+              : 0;
+          const isChampionshipRound =
+            matchesInRound === 2 && previousRoundMatchCount === 2;
+          const isFinalMatch =
+            matchesInRound === 1 || (isChampionshipRound && match.position === 1);
+          const bestOf = isFinalMatch ? settings.finalBestOf : settings.matchBestOf;
           const requiredWins = Math.floor(bestOf / 2) + 1;
 
           if (input.homeScore !== undefined || input.awayScore !== undefined) {
@@ -1041,7 +1271,7 @@ export async function pickMatchWinnerAndAdvance(input: {
             generatedRound: progress.finished ? null : progress.generatedRound ?? null,
           };
         },
-        { isolationLevel: "Serializable" },
+        INTERACTIVE_TRANSACTION_OPTIONS,
       ),
     );
   } catch (error) {
@@ -1246,7 +1476,7 @@ export async function joinTournament(input: {
             tournament,
           };
         },
-        { isolationLevel: "Serializable" },
+        INTERACTIVE_TRANSACTION_OPTIONS,
       ),
     );
   } catch (error) {
@@ -1363,7 +1593,7 @@ export async function approveTournamentJoinRequest(input: {
             settings,
           };
         },
-        { isolationLevel: "Serializable" },
+        INTERACTIVE_TRANSACTION_OPTIONS,
       ),
     );
   } catch (error) {
@@ -1456,7 +1686,7 @@ export async function removeTeamFromTournamentByAdmin(input: {
             status: "REMOVED" as const,
           };
         },
-        { isolationLevel: "Serializable" },
+        INTERACTIVE_TRANSACTION_OPTIONS,
       ),
     );
   } catch (error) {

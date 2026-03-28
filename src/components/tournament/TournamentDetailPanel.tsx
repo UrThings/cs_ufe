@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { TournamentBracket } from "@/components/tournament/TournamentBracket";
 import { buildBracketRounds } from "@/components/tournament/bracket-rounds";
+import { getTournamentMatchHeading } from "@/components/tournament/match-labels";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 
 type TeamSummary = {
@@ -247,7 +248,7 @@ export function TournamentDetailPanel({ tournament, viewer }: TournamentDetailPa
                     >
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-xs uppercase tracking-[0.24em] text-zinc-300/75">
-                          Round {match.round} - Match {match.position}
+                          {getTournamentMatchHeading(tournament.matches, match)}
                         </p>
                         <Badge className={getMatchStatusTone(match.status)}>{match.status}</Badge>
                       </div>

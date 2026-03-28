@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle, Input, Label, useToast } from "@/components/ui";
 import { TournamentBracket } from "@/components/tournament/TournamentBracket";
 import { buildBracketRounds } from "@/components/tournament/bracket-rounds";
+import { getTournamentMatchHeading } from "@/components/tournament/match-labels";
 
 type TeamInfo = {
   id: number;
@@ -464,7 +465,7 @@ export function AdminTournamentDetail({ tournament }: AdminTournamentDetailProps
                     >
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-xs uppercase tracking-[0.24em] text-zinc-300/75">
-                          Round {match.round} - Match {match.position}
+                          {getTournamentMatchHeading(tournament.matches, match)}
                         </p>
                         <Badge className={getMatchStatusTone(match.status)}>{match.status}</Badge>
                       </div>
@@ -533,7 +534,7 @@ export function AdminTournamentDetail({ tournament }: AdminTournamentDetailProps
                 >
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm text-zinc-100">
-                      Round {match.round} - Match {match.position}
+                      {getTournamentMatchHeading(tournament.matches, match)}
                     </p>
                     <Badge className={getMatchStatusTone(match.status)}>{match.status}</Badge>
                   </div>
